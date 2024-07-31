@@ -17,11 +17,11 @@ spin_probability = 0.5  # when initialising if random.random >= spin_probability
 
 
 # visualise the data in a heatmap
-def visualise(state, temp):
+def visualise(state, temp, string):
     plt.figure(figsize=(10, 2))
     seaborn.heatmap([state]*2, cmap="Greys", cbar=False, xticklabels=False,
                     yticklabels=False)  # had make it 2d for heatmap to work :(
-    plt.title("Final spin state at temperature: " + str(temp))
+    plt.title(string + " spin state at temperature: " + str(temp))
     plt.show()
 
 
@@ -39,10 +39,9 @@ def solveU(state):
     # state - some microstate
     # beta - defined as 1/kT, used to determine a probability
 
-    # returns:
+# returns:
     #   - next state -- may have one flipped dipole compared to state
 def metropolis(state, beta):
-
     # choose random dipole
     random_dipole = np.random.randint(0, N, 1)[0]
     next_state = copy.deepcopy(state) # make copy
@@ -61,19 +60,25 @@ def metropolis(state, beta):
 
 
 def model(): # one dimensional Ising Model
+    # variables
     temp = initial_T
     beta = 1/(k*temp)
-    spins = np.random.random(N) # initialise spins
+    # initialise spins
+    spins = np.random.random(N)
     for i in range(N):
         if spins[i] >= spin_probability:
             spins[i] = 1
         else:
             spins[i] = -1
+    #visualise(spins, temp, "Initial") # visualise intial state
+
     # run metropolis algorithm such that each dipole is given about 1000 chances to flip
     # for each dipole there is a 1/N chance of being selected. therefore, need about 1000N iterations
+    # should I round up to maybe 1250ish??? i think 1000N should be fine
     total_steps = 1000 * N
     for i in range(total_steps):
         spins = metropolis(spins, beta)
-    visualise(spins, temp) # one d visualisation
+    #visualise(spins, temp, "Final") # visualise final state
+
 
 model()
