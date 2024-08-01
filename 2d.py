@@ -52,6 +52,20 @@ def next_state_U(state, row, col): # solves next states U value correctly,
     return U * -epsilon  # multiply by negative eps and return
 
 
+# solve U for some initial state
+def solveU(state):
+    U = 0
+    for i in range(N):  # same as 1d, 1->i+1 and j to j+1, then multiply by 2 if necessary
+        for j in range(N):
+            below = (i + 1) % N  # to account for periodic boundaries
+            right = (j + 1) % N
+            # add right and below neighbour, should cover all cells, do i need account for both ways
+            # ie. multiply by 2, (adding above and left neightbours). realistically,
+            # only changes U by 2, so del_U will be twice as big too. ask tutor
+            U += state[i][j]*(state[below][j] + state[i][right])
+    return U * -epsilon  # multiply by negative eps and return
+
+
 # metropolis algorithm
 # inputs:
     # state - some microstate
