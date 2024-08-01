@@ -15,13 +15,14 @@ import time
 
 
 k = 1  # Boltzmann constant -- currently trying to use "natural units"
-N = 15  # number of dipoles in the system
+N = 30  # number of dipoles in the system
 epsilon = 1  # energy contribution factor??
 initial_T = 2.5  # temperature
 spin_probability = 0.5  # when initialising if random.random >= spin_probability, set spin to 1, else -1
 total_steps = 1000 * N * N + 1 # 1000 * N^2 + 1 total steps
 timesteps = np.linspace(0, total_steps, total_steps) # for plotting later
 Us = np.linspace(0, total_steps, total_steps) # list of Us
+
 
 # visualise the data in a heatmap
 def visualise(state, temp, string):
@@ -32,22 +33,24 @@ def visualise(state, temp, string):
 
 
 # attempt to speed up program, would remove need for copy and running solve_U twice
-def next_state_U(state, row, col):
-    pass
-
-
-# solve U for some given state
-def solveU(state):
+def next_state_U(state, row, col): # solves next states U value correctly,
+    # quicker then deep copying the old state, and solving U then subtracting difference
     U = 0
-    for i in range(N):  # same as 1d, 1->i+1 and j to j+1, then multiply by 2 if necessary
+    for i in range(N):
         for j in range(N):
-            below = (i + 1) % N  # to account for periodic boundaries
-            right = (j + 1) % N
-            # add right and below neighbour, should cover all cells, do i need account for both ways
-            # ie. multiply by 2, (adding above and left neightbours). realistically,
-            # only changes U by 2, so del_U will be twice as big too. ask tutor
-            U += state[i][j]*(state[below][j] + state[i][right])
+            # check if randomly selected dipole is right ((j+1)%N), below ((i+1)%N) or this cell(i, j)
+            if i == row and j == col:
+                U += state[i][j] * (state[(i + 1) % N][j] + state[i][(j + 1) % N]) * -1
+                continue
+            if (i + 1) % N == row and j == col:
+                U += state[i][j] * (state[(i + 1) % N][j] * -1 + state[i][(j + 1) % N])
+                continue
+            if (j + 1) % N == col and i == row:
+                U += state[i][j] * (state[(i + 1) % N][j] + state[i][(j + 1) % N] * -1)
+                continue
+            U += state[i][j] * (state[(i + 1) % N][j] + state[i][(j + 1) % N])
     return U * -epsilon  # multiply by negative eps and return
+
 
 # metropolis algorithm
 # inputs:
@@ -59,16 +62,17 @@ def solveU(state):
 def metropolis(state, beta, last_U):
     # choose random dipole
     rrow, rcol = np.random.randint(0, N, (1, 2))[0]
-    next_state = copy.deepcopy(state) # can we do without this copy???
-    next_state[rrow][rcol] *= -1 # flip dipole
-    next_U = solveU(next_state)
+    next_U = next_state_U(state, rrow, rcol) # works
     del_U = next_U - last_U
+
     if del_U <= 0:
-        return next_state, 1, next_U # number indicates dipole has been flipped
+        state[rrow][rcol] *= -1  # flip dipole
+        return state, 1, next_U # number indicates dipole has been flipped
     else:
         flip = np.random.random()
         if flip <= np.exp(-beta*del_U):
-            return next_state, 1, next_U
+            state[rrow][rcol] *= -1  # flip dipole
+            return state, 1, next_U
         else:
             return state, 0, last_U
 
