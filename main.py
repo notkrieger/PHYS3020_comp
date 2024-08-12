@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn
+from math import comb
 
 
 """
@@ -60,6 +61,14 @@ def metropolis(state, beta): # did not have to speed up as much because N << N^2
 
 Z = 0  # partition function
 
+def find_multiplicity(state):
+    up_count = 0
+    for dipole in state:
+        if dipole > 0:
+            up_count += 1
+    return float(comb(len(state), up_count))
+
+
 def model(temp): # one dimensional Ising Model
     # variables
     beta = 1/(k*temp)
@@ -70,7 +79,7 @@ def model(temp): # one dimensional Ising Model
             spins[i] = 1
         else:
             spins[i] = -1
-    visualise(spins, temp, "Initial") # visualise intial state
+    #visualise(spins, temp, "Initial") # visualise intial state
 
     # run metropolis algorithm such that each dipole is given about 1000 chances to flip
     # for each dipole there is a 1/N chance of being selected. therefore, need about 1000N iterations
@@ -78,24 +87,41 @@ def model(temp): # one dimensional Ising Model
     total_steps = 1000 * N
     for i in range(total_steps):
         spins = metropolis(spins, beta)
+
+    # calculate stuff for plots
+    U = solveU(spins) / N
+    S = k * np.log(find_multiplicity(spins)) / N
+    f = U - temp * S / N
+    c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2) / N
     #visualise(spins, temp, "Final") # visualise final state
+    return (U, f, S, c)
 
 
-
-#model(initial_T)
 
 # for plots
-us= []
+us = []
+us_exp = []
 fs = []
+fs_exp = []
 Ss = []
+Ss_exp = []
 cs = []
+cs_exp = []
 
-temperatures = np.linspace(0.01, 3, 1000)
+temperatures_theo = np.linspace(0.01, 3, 1000)
+temperatures_exp = np.linspace(0.01, 3, 10)
 
 
-def make_plots(temps):
+def make_plots(temps_exp, temps_theo):
     # theoretical plots
-    for temp in temps:
+    for temp in temps_exp:
+        print(temp)
+        results = model(temp)
+        us_exp.append(results[0])
+        fs_exp.append(results[1])
+        Ss_exp.append(results[2])
+        cs_exp.append(results[3])
+    for temp in temps_theo:
         beta = 1 / (k * temp)
         us.append(-epsilon*np.tanh(beta*epsilon))
         fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
@@ -103,29 +129,37 @@ def make_plots(temps):
         cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
 
     # plot u
-    plt.plot(temps, us)
-    plt.title("theoretical plot of u against T")
+    plt.plot(temps_theo, us, label="exact")
+    plt.plot(temps_exp, us_exp, label="sim")
+    plt.legend()
+    plt.title("plot of u against T")
     plt.ylabel('u')
     plt.xlabel("temperature")
     plt.show()
     #plot f
-    plt.plot(temps, fs)
-    plt.title("theoretical plot of f against T")
+    plt.plot(temps_theo, fs, label="exact")
+    plt.plot(temps_exp, fs_exp, label="sim")
+    plt.legend()
+    plt.title("plot of f against T")
     plt.ylabel('f')
     plt.xlabel("temperature")
     plt.show()
     #plot S
-    plt.plot(temps, Ss)
-    plt.title("theoretical plot of S against T")
+    plt.plot(temps_theo, Ss, label="exact")
+    plt.plot(temps_exp, Ss_exp, label="sim")
+    plt.legend()
+    plt.title("plot of S against T")
     plt.ylabel('S')
     plt.xlabel("temperature")
     plt.show()
     #plot c
-    plt.plot(temps, cs)
-    plt.title("theoretical plot of c against T")
+    plt.plot(temps_theo, cs, label="exact")
+    plt.plot(temps_exp, cs_exp, label="sim")
+    plt.legend()
+    plt.title("plot of c against T")
     plt.ylabel('c')
     plt.xlabel("temperature")
     plt.show()
 
 
-make_plots(temperatures)
+make_plots(temperatures_exp, temperatures_theo)
