@@ -89,14 +89,12 @@ def model(temp): # one dimensional Ising Model
         spins = metropolis(spins, beta)
 
     # calculate stuff for plots
-    U = solveU(spins) / N
-    S = k * np.log(find_multiplicity(spins)) / N
-    f = U - temp * S / N
-    c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2) / N
+    U = solveU(spins)
+    S = k * np.log(find_multiplicity(spins))
+    f = U - temp * S
+    c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2)
     #visualise(spins, temp, "Final") # visualise final state
-    return (U, f, S, c)
-
-
+    return (U/N, f/N, S/N, c/N)
 
 # for plots
 us = []
@@ -108,9 +106,10 @@ Ss_exp = []
 cs = []
 cs_exp = []
 
-temperatures_theo = np.linspace(0.01, 3, 1000)
-temperatures_exp = np.linspace(0.01, 3, 10)
-
+low_t = 0.1
+high_t = 3
+temperatures_theo = np.linspace(low_t, high_t, 1000)
+temperatures_exp = np.linspace(low_t, high_t, 10)
 
 def make_plots(temps_exp, temps_theo):
     # theoretical plots
