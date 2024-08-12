@@ -89,38 +89,54 @@ def model(temp): # one dimensional Ising Model
         spins = metropolis(spins, beta)
 
     # calculate stuff for plots
+    # how to calcuate error bars?
+    #   - could just run a bunch of times and gain std error
+    #   - partial derivative method like in practicals?? - will this work for U?
+    #   -
     U = solveU(spins)
+    dU = 1
     S = k * np.log(find_multiplicity(spins))
+    dS = 0
     f = U - temp * S
+    df= 0
     c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2)
+    dc = 0
     #visualise(spins, temp, "Final") # visualise final state
-    return (U/N, f/N, S/N, c/N)
+    return U/N, f/N, S/N, c/N, dU, df, dS, dc
 
 # for plots
 us = []
-us_exp = []
+us_sim = []
+us_err = []
 fs = []
-fs_exp = []
+fs_sim = []
+fs_err = []
 Ss = []
-Ss_exp = []
+Ss_sim = []
+Ss_err = []
 cs = []
-cs_exp = []
+cs_sim = []
+cs_err = []
 
 low_t = 0.1
 high_t = 3
-temperatures_theo = np.linspace(low_t, high_t, 1000)
-temperatures_exp = np.linspace(low_t, high_t, 10)
+temperatures_exact = np.linspace(low_t, high_t, 1000)
+temperatures_sim = np.linspace(low_t, high_t, 10)
 
-def make_plots(temps_exp, temps_theo):
+def make_plots(temps_sim, temps_exact):
     # theoretical plots
-    for temp in temps_exp:
+    for temp in temps_sim:
         print(temp)
         results = model(temp)
-        us_exp.append(results[0])
-        fs_exp.append(results[1])
-        Ss_exp.append(results[2])
-        cs_exp.append(results[3])
-    for temp in temps_theo:
+        us_sim.append(results[0])
+        fs_sim.append(results[1])
+        Ss_sim.append(results[2])
+        cs_sim.append(results[3])
+        us_err.append(results[4])
+        fs_err.append(results[5])
+        Ss_err.append(results[6])
+        cs_err.append(results[7])
+    for temp in temps_exact:
         beta = 1 / (k * temp)
         us.append(-epsilon*np.tanh(beta*epsilon))
         fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
@@ -128,32 +144,32 @@ def make_plots(temps_exp, temps_theo):
         cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
 
     # plot u
-    plt.plot(temps_theo, us, label="exact")
-    plt.plot(temps_exp, us_exp, label="sim")
+    plt.plot(temps_exact, us, label="exact")
+    plt.errorbar(temps_sim, us_sim, yerr=us_err, ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of u against T")
     plt.ylabel('u')
     plt.xlabel("temperature")
     plt.show()
     #plot f
-    plt.plot(temps_theo, fs, label="exact")
-    plt.plot(temps_exp, fs_exp, label="sim")
+    plt.plot(temps_exact, fs, label="exact")
+    plt.errorbar(temps_sim, fs_sim, yerr=fs_err, ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of f against T")
     plt.ylabel('f')
     plt.xlabel("temperature")
     plt.show()
     #plot S
-    plt.plot(temps_theo, Ss, label="exact")
-    plt.plot(temps_exp, Ss_exp, label="sim")
+    plt.plot(temps_exact, Ss, label="exact")
+    plt.errorbar(temps_sim, Ss_sim, yerr=Ss_err, ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of S against T")
     plt.ylabel('S')
     plt.xlabel("temperature")
     plt.show()
     #plot c
-    plt.plot(temps_theo, cs, label="exact")
-    plt.plot(temps_exp, cs_exp, label="sim")
+    plt.plot(temps_exact, cs, label="exact")
+    plt.errorbar(temps_sim, cs_sim, yerr=cs_err, ecolor="k",  label="sim")
     plt.legend()
     plt.title("plot of c against T")
     plt.ylabel('c')
@@ -161,4 +177,4 @@ def make_plots(temps_exp, temps_theo):
     plt.show()
 
 
-make_plots(temperatures_exp, temperatures_theo)
+make_plots(temperatures_sim, temperatures_exact)
