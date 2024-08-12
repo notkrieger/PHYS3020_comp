@@ -41,7 +41,7 @@ def solveU(state):
 
 # returns:
     #   - next state -- may have one flipped dipole compared to state
-def metropolis(state, beta):
+def metropolis(state, beta): # did not have to speed up as much because N << N^2 (for N = 100)
     # choose random dipole
     random_dipole = np.random.randint(0, N, 1)[0]
     next_state = copy.deepcopy(state) # make copy
@@ -58,10 +58,10 @@ def metropolis(state, beta):
         else:
             return state
 
+Z = 0  # partition function
 
-def model(): # one dimensional Ising Model
+def model(temp): # one dimensional Ising Model
     # variables
-    temp = initial_T
     beta = 1/(k*temp)
     # initialise spins
     spins = np.random.random(N)
@@ -70,7 +70,7 @@ def model(): # one dimensional Ising Model
             spins[i] = 1
         else:
             spins[i] = -1
-    #visualise(spins, temp, "Initial") # visualise intial state
+    visualise(spins, temp, "Initial") # visualise intial state
 
     # run metropolis algorithm such that each dipole is given about 1000 chances to flip
     # for each dipole there is a 1/N chance of being selected. therefore, need about 1000N iterations
@@ -81,4 +81,51 @@ def model(): # one dimensional Ising Model
     #visualise(spins, temp, "Final") # visualise final state
 
 
-model()
+
+#model(initial_T)
+
+# for plots
+us= []
+fs = []
+Ss = []
+cs = []
+
+temperatures = np.linspace(0.01, 3, 1000)
+
+
+def make_plots(temps):
+    # theoretical plots
+    for temp in temps:
+        beta = 1 / (k * temp)
+        us.append(-epsilon*np.tanh(beta*epsilon))
+        fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
+        Ss.append(epsilon/temp*(1 - np.tanh(beta*epsilon)) + k*np.log(1 + np.exp(-2*epsilon*beta)))
+        cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
+
+    # plot u
+    plt.plot(temps, us)
+    plt.title("theoretical plot of u against T")
+    plt.ylabel('u')
+    plt.xlabel("temperature")
+    plt.show()
+    #plot f
+    plt.plot(temps, fs)
+    plt.title("theoretical plot of f against T")
+    plt.ylabel('f')
+    plt.xlabel("temperature")
+    plt.show()
+    #plot S
+    plt.plot(temps, Ss)
+    plt.title("theoretical plot of S against T")
+    plt.ylabel('S')
+    plt.xlabel("temperature")
+    plt.show()
+    #plot c
+    plt.plot(temps, cs)
+    plt.title("theoretical plot of c against T")
+    plt.ylabel('c')
+    plt.xlabel("temperature")
+    plt.show()
+
+
+make_plots(temperatures)
