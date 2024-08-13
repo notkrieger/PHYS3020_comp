@@ -89,53 +89,75 @@ def model(temp): # one dimensional Ising Model
         spins = metropolis(spins, beta)
 
     # calculate stuff for plots
-    # how to calcuate error bars?
-    #   - could just run a bunch of times and gain std error
-    #   - partial derivative method like in practicals?? - will this work for U?
-    #   -
-    U = solveU(spins)
-    dU = 1
-    S = k * np.log(find_multiplicity(spins))
-    dS = 0
-    f = U - temp * S
-    df= 0
+    #
+    U = solveU(spins) # internal energy due to nearest-neighbour interactions
+    S = k * np.log(find_multiplicity(spins)) # entropy S = k ln(g)
+    f = U - temp * S # free energy F = U - TS
     c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2)
-    dc = 0
+    m = np.mean(spins) # average spin m = M/mu*N = s_bar
+
     #visualise(spins, temp, "Final") # visualise final state
-    return U/N, f/N, S/N, c/N, dU, df, dS, dc
+    return U/N, f/N, S/N, c/N, m
 
 # for plots
-us = []
-us_sim = []
-us_err = []
-fs = []
-fs_sim = []
-fs_err = []
-Ss = []
-Ss_sim = []
-Ss_err = []
-cs = []
-cs_sim = []
-cs_err = []
-
+num_trials = 10
 low_t = 0.1
 high_t = 3
+num_sim_temps = 15
 temperatures_exact = np.linspace(low_t, high_t, 1000)
-temperatures_sim = np.linspace(low_t, high_t, 10)
+temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
+
+# setting up plot arrays
+us = []
+us_sim = np.zeros((num_trials, num_sim_temps))
+fs = []
+fs_sim = np.zeros((num_trials, num_sim_temps))
+Ss = []
+Ss_sim = np.zeros((num_trials, num_sim_temps))
+cs = []
+cs_sim = np.zeros((num_trials, num_sim_temps))
+ms_sim = np.zeros(num_sim_temps)
+
+
+## very unclean code, shouldnt affect speed tho cos at end
+def ave(sim_values):
+    ave = np.zeros(num_sim_temps)
+    for j in range(num_trials):
+        for i in range(num_sim_temps):
+            ave[i] += sim_values[j][i]
+    return ave/num_trials
+
+# calculate error
+def error(sim_values):
+    average = ave(sim_values)
+    err = np.zeros(num_sim_temps)
+
+    for j in range(num_trials):
+        for i in range(num_sim_temps):
+            err[i] += (sim_values[j][i] - average[i])**2
+    for i in range(num_sim_temps):
+        err[i] /= (num_trials - 1)
+        err[i] = err[i]**0.5
+    return err
+
 
 def make_plots(temps_sim, temps_exact):
     # theoretical plots
-    for temp in temps_sim:
-        print(temp)
-        results = model(temp)
-        us_sim.append(results[0])
-        fs_sim.append(results[1])
-        Ss_sim.append(results[2])
-        cs_sim.append(results[3])
-        us_err.append(results[4])
-        fs_err.append(results[5])
-        Ss_err.append(results[6])
-        cs_err.append(results[7])
+    for trial in range(num_trials):
+        print(trial)
+        for i in range(num_sim_temps):
+            temp = temps_sim[i]
+            print(temp)
+            results = model(temp)
+            us_sim[trial][i] = results[0]
+            fs_sim[trial][i] = results[1]
+            Ss_sim[trial][i] = results[2]
+            cs_sim[trial][i] = results[3]
+            ms_sim[i] = results[4] # dont need to average or calc uncertainty for m
+    print(us_sim)
+    print(ave(us_sim))
+    print(error(us_sim))
+    # exact solutions
     for temp in temps_exact:
         beta = 1 / (k * temp)
         us.append(-epsilon*np.tanh(beta*epsilon))
@@ -145,7 +167,7 @@ def make_plots(temps_sim, temps_exact):
 
     # plot u
     plt.plot(temps_exact, us, label="exact")
-    plt.errorbar(temps_sim, us_sim, yerr=us_err, ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(us_sim), yerr=error(us_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of u against T")
     plt.ylabel('u')
@@ -153,7 +175,7 @@ def make_plots(temps_sim, temps_exact):
     plt.show()
     #plot f
     plt.plot(temps_exact, fs, label="exact")
-    plt.errorbar(temps_sim, fs_sim, yerr=fs_err, ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(fs_sim), yerr=error(fs_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of f against T")
     plt.ylabel('f')
@@ -161,7 +183,7 @@ def make_plots(temps_sim, temps_exact):
     plt.show()
     #plot S
     plt.plot(temps_exact, Ss, label="exact")
-    plt.errorbar(temps_sim, Ss_sim, yerr=Ss_err, ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(Ss_sim), yerr=error(Ss_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of S against T")
     plt.ylabel('S')
@@ -169,10 +191,16 @@ def make_plots(temps_sim, temps_exact):
     plt.show()
     #plot c
     plt.plot(temps_exact, cs, label="exact")
-    plt.errorbar(temps_sim, cs_sim, yerr=cs_err, ecolor="k",  label="sim")
+    plt.errorbar(temps_sim, ave(cs_sim), yerr=error(cs_sim), ecolor="k",  label="sim")
     plt.legend()
     plt.title("plot of c against T")
     plt.ylabel('c')
+    plt.xlabel("temperature")
+    plt.show()
+    # plot m
+    plt.errorbar(temps_sim, ms_sim)
+    plt.title("plot of m against T")
+    plt.ylabel('m')
     plt.xlabel("temperature")
     plt.show()
 
