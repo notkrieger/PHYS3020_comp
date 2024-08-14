@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn
 from math import comb
+import time
 
 
 """
@@ -26,6 +27,24 @@ def visualise(state, temp, string):
     plt.show()
 
 
+def next_state_U(state, index, lastU): # solves next states U value correctly,
+    # quicker then deep copying the old state, and solving U then subtracting difference
+
+
+    del_U = 0
+
+    right = (index + 1) % N
+    # subtract influence of unflipped dipole
+    del_U -= state[index] * state[right]
+    del_U -= state[(index - 1) % N] * state[index]
+    # add change from flipping dipole
+    del_U += state[index] * -1 * state[right]
+    del_U += state[(index - 1) % N] * state[index] * -1
+    del_U *= -epsilon
+    del_U += lastU
+
+    return del_U
+
 # solve U for some given state
 def solveU(state):
     U = 0
@@ -42,24 +61,21 @@ def solveU(state):
 
 # returns:
     #   - next state -- may have one flipped dipole compared to state
-def metropolis(state, beta): # did not have to speed up as much because N << N^2 (for N = 100)
+def metropolis(state, beta, lastU): # did not have to speed up as much because N << N^2 (for N = 100)
     # choose random dipole
     random_dipole = np.random.randint(0, N, 1)[0]
-    next_state = copy.deepcopy(state) # make copy
-    next_state[random_dipole] *= -1 # flip dipole
-    U = solveU(state)
-    next_U = solveU(next_state)
-    del_U = next_U - U
-    if del_U <= 0:
-        return next_state
+    next_U = next_state_U(state, random_dipole, lastU)
+    del_U = next_U - lastU
+    if del_U <= 0: # flip
+        state[random_dipole] *= -1
+        return state, next_U
     else:
         flip = np.random.random()
-        if flip <= np.exp(-beta*del_U):
-            return next_state
-        else:
-            return state
-
-Z = 0  # partition function
+        if flip <= np.exp(-beta*del_U): # flip
+            state[random_dipole] *= -1
+            return state, next_U
+        else: # dont flip
+            return state, lastU
 
 def find_multiplicity(state):
     up_count = 0
@@ -71,7 +87,13 @@ def find_multiplicity(state):
 
 def model(temp): # one dimensional Ising Model
     # variables
+    total_steps = 1000 * N
+    Us = np.linspace(0, total_steps, total_steps)
+
     beta = 1/(k*temp)
+    totalU = 0
+    totalU2 = 0
+    totalm = 0
     # initialise spins
     spins = np.random.random(N)
     for i in range(N):
@@ -81,29 +103,36 @@ def model(temp): # one dimensional Ising Model
             spins[i] = -1
     #visualise(spins, temp, "Initial") # visualise intial state
 
-    # run metropolis algorithm such that each dipole is given about 1000 chances to flip
-    # for each dipole there is a 1/N chance of being selected. therefore, need about 1000N iterations
-    # should I round up to maybe 1250ish??? i think 1000N should be fine
-    total_steps = 1000 * N
+    Us[0] = solveU(spins)
     for i in range(total_steps):
-        spins = metropolis(spins, beta)
+        #print(Us[i])
+        spins, next_U = metropolis(spins, beta, Us[i])
+        totalU += next_U
+        totalU2 += next_U ** 2
+        if i + 1 >= total_steps:
+            continue
+        Us[i+1] = next_U
+        totalm += np.mean(spins)
 
     # calculate stuff for plots
     #
-    U = solveU(spins) # internal energy due to nearest-neighbour interactions
+    U_ave = totalU / total_steps # time average value of U : ⟨U⟩
+    U2_ave = totalU2 / total_steps # ⟨U^2⟩
+    m_ave = totalm / total_steps
+    U = solveU(spins)
     S = k * np.log(find_multiplicity(spins)) # entropy S = k ln(g)
-    f = U - temp * S # free energy F = U - TS
-    c = (U**2 - (-N*epsilon*np.tanh(beta*epsilon))**2)/(k*temp**2)
+    f = U_ave - temp * S # free energy F = U - TS
+    c = (U2_ave - U_ave**2)/(k*temp**2) # ⟨U^2⟩ - ⟨U⟩^2 / kT^2
     m = np.mean(spins) # average spin m = M/mu*N = s_bar
 
     #visualise(spins, temp, "Final") # visualise final state
-    return U/N, f/N, S/N, c/N, m
+    return U_ave/N, f/N, S/N, c/N, m_ave
 
 # for plots
-num_trials = 10
-low_t = 0.1
+num_trials = 1
+low_t = 0.5
 high_t = 3
-num_sim_temps = 15
+num_sim_temps = 5
 temperatures_exact = np.linspace(low_t, high_t, 1000)
 temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
 
@@ -118,14 +147,18 @@ cs = []
 cs_sim = np.zeros((num_trials, num_sim_temps))
 ms_sim = np.zeros(num_sim_temps)
 
+# for histogram of m's
+m_aves = np.zeros((num_sim_temps, num_trials))
 
-## very unclean code, shouldnt affect speed tho cos at end
+
+# very unclean code, shouldn't affect speed tho cos at end
 def ave(sim_values):
     ave = np.zeros(num_sim_temps)
     for j in range(num_trials):
         for i in range(num_sim_temps):
             ave[i] += sim_values[j][i]
     return ave/num_trials
+
 
 # calculate error
 def error(sim_values):
@@ -142,40 +175,51 @@ def error(sim_values):
 
 
 def make_plots(temps_sim, temps_exact):
-    # theoretical plots
+    # simulate solutions
+
     for trial in range(num_trials):
+        start = time.time()
         print(trial)
         for i in range(num_sim_temps):
             temp = temps_sim[i]
-            print(temp)
             results = model(temp)
             us_sim[trial][i] = results[0]
-            fs_sim[trial][i] = results[1]
-            Ss_sim[trial][i] = results[2]
-            cs_sim[trial][i] = results[3]
-            ms_sim[i] = results[4] # dont need to average or calc uncertainty for m
-    print(us_sim)
-    print(ave(us_sim))
-    print(error(us_sim))
-    # exact solutions
+            #fs_sim[trial][i] = results[1]
+            #Ss_sim[trial][i] = results[2]
+            #cs_sim[trial][i] = results[3]
+            #ms_sim[i] = results[4] # dont need to average or calc uncertainty for m
+            m_aves[i][trial] = results[4]
+        end = time.time()
+        print(end - start)
+
+    # calculate exact solutions
     for temp in temps_exact:
         beta = 1 / (k * temp)
         us.append(-epsilon*np.tanh(beta*epsilon))
         fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
         Ss.append(epsilon/temp*(1 - np.tanh(beta*epsilon)) + k*np.log(1 + np.exp(-2*epsilon*beta)))
         cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
+    """
+    for i in range(num_sim_temps):
+        plt.hist(m_aves[i])
+        plt.title("m values at " + str(temperatures_sim[i]) + " ε/k, with " + str(N) + " dipoles")
+        plt.ylabel("frequency")
+        plt.xlabel("m")
+        plt.show()
+    """
 
     # plot u
     plt.plot(temps_exact, us, label="exact")
-    plt.errorbar(temps_sim, ave(us_sim), yerr=error(us_sim), ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(us_sim), ls="--", yerr=error(us_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of u against T")
     plt.ylabel('u')
     plt.xlabel("temperature")
     plt.show()
+    """
     #plot f
     plt.plot(temps_exact, fs, label="exact")
-    plt.errorbar(temps_sim, ave(fs_sim), yerr=error(fs_sim), ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(fs_sim), ls="--", yerr=error(fs_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of f against T")
     plt.ylabel('f')
@@ -183,7 +227,7 @@ def make_plots(temps_sim, temps_exact):
     plt.show()
     #plot S
     plt.plot(temps_exact, Ss, label="exact")
-    plt.errorbar(temps_sim, ave(Ss_sim), yerr=error(Ss_sim), ecolor="k", label="sim")
+    plt.errorbar(temps_sim, ave(Ss_sim), ls="--", yerr=error(Ss_sim), ecolor="k", label="sim")
     plt.legend()
     plt.title("plot of S against T")
     plt.ylabel('S')
@@ -191,9 +235,10 @@ def make_plots(temps_sim, temps_exact):
     plt.show()
     #plot c
     plt.plot(temps_exact, cs, label="exact")
-    plt.errorbar(temps_sim, ave(cs_sim), yerr=error(cs_sim), ecolor="k",  label="sim")
+    plt.errorbar(temps_sim, ave(cs_sim), ls="--", yerr=error(cs_sim), ecolor="k",  label="sim")
+    #plt.plot(temps_sim, ave(cs_sim), label="sim")
     plt.legend()
-    plt.title("plot of c against T")
+    plt.title("exact plot of c against T")
     plt.ylabel('c')
     plt.xlabel("temperature")
     plt.show()
@@ -203,6 +248,7 @@ def make_plots(temps_sim, temps_exact):
     plt.ylabel('m')
     plt.xlabel("temperature")
     plt.show()
+    """
 
 
 make_plots(temperatures_sim, temperatures_exact)
