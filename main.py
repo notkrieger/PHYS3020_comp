@@ -12,7 +12,7 @@ import time
 
 
 k = 1  # Boltzmann constant -- currently trying to use "natural units"
-N = 500  # number of dipoles in the system
+N = 100  # number of dipoles in the system
 epsilon = 1  # energy contribution factor??
 initial_T = 2  # temperature
 spin_probability = 0.5  # when initialising if random.random >= spin_probability, set spin to 1, else -1
@@ -23,7 +23,7 @@ def visualise(state, temp, string):
     plt.figure(figsize=(10, 2))
     seaborn.heatmap([state]*2, cmap="Greys", cbar=False, xticklabels=False,
                     yticklabels=False)  # had make it 2d for heatmap to work :(
-    plt.title(string + " spin state at temperature: " + str(temp))
+    plt.title(string + " spin state")
     plt.show()
 
 
@@ -53,6 +53,13 @@ def solveU(state):
         U += state[i]*state[right]  # add to U
     return U * -epsilon  # multiply by negative eps and return
 
+
+def solve_U2(state):
+    U2 = 0
+    for i in range(N):  # just count interaction between dipole i and i + 1 --- do i need to x2???
+        right = (i + 1) % N  # to account for periodic boundaries
+        U2 += (state[i] * state[right]) ** 2  # add to U
+    return U2   # multiply by negative eps and return
 
 # metropolis algorithm
 # inputs:
@@ -89,7 +96,7 @@ def model(temp): # one dimensional Ising Model
     # variables
     total_steps = 1000 * N
     Us = np.linspace(0, total_steps, total_steps)
-
+    Us2 = np.linspace(0, total_steps, total_steps)
     beta = 1/(k*temp)
     totalU = 0
     totalU2 = 0
@@ -104,37 +111,46 @@ def model(temp): # one dimensional Ising Model
     #visualise(spins, temp, "Initial") # visualise intial state
 
     Us[0] = solveU(spins)
+    Us2[0] = solve_U2(spins)
     for i in range(total_steps):
         #print(Us[i])
         spins, next_U = metropolis(spins, beta, Us[i])
         totalU += next_U
-        totalU2 += next_U ** 2
+
         if i + 1 >= total_steps:
             continue
+
+        Us2[i + 1] = solve_U2(spins)
         Us[i+1] = next_U
         totalm += np.mean(spins)
 
     # calculate stuff for plots
     #
-    U_ave = totalU / total_steps # time average value of U : ⟨U⟩
-    U2_ave = totalU2 / total_steps # ⟨U^2⟩
+    U_ave = np.mean(Us) / N # time average value of U : ⟨U⟩
+    U2_ave = np.mean(Us2) / N # ⟨U^2⟩
     m_ave = totalm / total_steps
+
     U = solveU(spins)
     S = k * np.log(find_multiplicity(spins)) # entropy S = k ln(g)
     f = U_ave - temp * S # free energy F = U - TS
     c = (U2_ave - U_ave**2)/(k*temp**2) # ⟨U^2⟩ - ⟨U⟩^2 / kT^2
+    if temp != 0.5:
+        print("⟨U^2⟩: " + str(U2_ave))
+        print("⟨U⟩^2: " + str(U_ave ** 2))
+        print("sim c  : " + str(c))
+        print("exact c: " + str(1/(temp**2 * np.cosh(beta)**2)))
     m = np.mean(spins) # average spin m = M/mu*N = s_bar
 
     #visualise(spins, temp, "Final") # visualise final state
-    return U_ave/N, f/N, S/N, c/N, m_ave
+    return U_ave/N, f/N, S/N, c/N, m
 
 # for plots
-num_trials = 100
-low_t = 0.5
+num_trials = 3
+low_t = 0.1
 high_t = 3
-num_sim_temps = 3
+num_sim_temps = 10
 temperatures_exact = np.linspace(low_t, high_t, 1000)
-temperatures_sim = [0.5, 1.0, 2.0]
+temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
 
 # setting up plot arrays
 us = []
@@ -181,13 +197,15 @@ def make_plots(temps_sim, temps_exact):
         start = time.time()
         print(trial)
         for i in range(num_sim_temps):
+
             temp = temps_sim[i]
+            print(temp)
             results = model(temp)
-            #us_sim[trial][i] = results[0]
-            #fs_sim[trial][i] = results[1]
-            #Ss_sim[trial][i] = results[2]
-            #cs_sim[trial][i] = results[3]
-            #ms_sim[i] = results[4] # dont need to average or calc uncertainty for m
+            us_sim[trial][i] = results[0]
+            fs_sim[trial][i] = results[1]
+            Ss_sim[trial][i] = results[2]
+            cs_sim[trial][i] = results[3]
+            ms_sim[i] = results[4] # dont need to average or calc uncertainty for m
             m_aves[i][trial] = results[4]
         end = time.time()
         print(end - start)
@@ -199,7 +217,7 @@ def make_plots(temps_sim, temps_exact):
         fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
         Ss.append(epsilon/temp*(1 - np.tanh(beta*epsilon)) + k*np.log(1 + np.exp(-2*epsilon*beta)))
         cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
-
+    """
     for i in range(num_sim_temps):
         plt.hist(m_aves[i], range=[-1, 1], bins=50)
         plt.title("m values at " + str(temperatures_sim[i]) + " ε/k, with " + str(N) + " dipoles")
@@ -207,7 +225,7 @@ def make_plots(temps_sim, temps_exact):
         plt.xlabel("m")
         plt.show()
 
-    """
+    
     # plot u
     plt.plot(temps_exact, us, label="exact")
     plt.errorbar(temps_sim, ave(us_sim), ls="--", yerr=error(us_sim), ecolor="k", label="sim")
@@ -233,21 +251,23 @@ def make_plots(temps_sim, temps_exact):
     plt.ylabel('S')
     plt.xlabel("temperature")
     plt.show()
+    """
     #plot c
     plt.plot(temps_exact, cs, label="exact")
     plt.errorbar(temps_sim, ave(cs_sim), ls="--", yerr=error(cs_sim), ecolor="k",  label="sim")
     #plt.plot(temps_sim, ave(cs_sim), label="sim")
     plt.legend()
-    plt.title("exact plot of c against T")
+    plt.title("plot of c against T")
     plt.ylabel('c')
     plt.xlabel("temperature")
     plt.show()
+    """
     # plot m
     plt.errorbar(temps_sim, ms_sim)
     plt.title("plot of m against T")
     plt.ylabel('m')
     plt.xlabel("temperature")
-    plt.show()
+    #plt.show()
     """
 
 
