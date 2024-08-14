@@ -12,7 +12,7 @@ import time
 
 
 k = 1  # Boltzmann constant -- currently trying to use "natural units"
-N = 100  # number of dipoles in the system
+N = 500  # number of dipoles in the system
 epsilon = 1  # energy contribution factor??
 initial_T = 2  # temperature
 spin_probability = 0.5  # when initialising if random.random >= spin_probability, set spin to 1, else -1
@@ -129,12 +129,12 @@ def model(temp): # one dimensional Ising Model
     return U_ave/N, f/N, S/N, c/N, m_ave
 
 # for plots
-num_trials = 1
+num_trials = 100
 low_t = 0.5
 high_t = 3
-num_sim_temps = 5
+num_sim_temps = 3
 temperatures_exact = np.linspace(low_t, high_t, 1000)
-temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
+temperatures_sim = [0.5, 1.0, 2.0]
 
 # setting up plot arrays
 us = []
@@ -183,7 +183,7 @@ def make_plots(temps_sim, temps_exact):
         for i in range(num_sim_temps):
             temp = temps_sim[i]
             results = model(temp)
-            us_sim[trial][i] = results[0]
+            #us_sim[trial][i] = results[0]
             #fs_sim[trial][i] = results[1]
             #Ss_sim[trial][i] = results[2]
             #cs_sim[trial][i] = results[3]
@@ -199,15 +199,15 @@ def make_plots(temps_sim, temps_exact):
         fs.append(-epsilon-k*temp*np.log(1 + np.exp(-2*epsilon*beta)))
         Ss.append(epsilon/temp*(1 - np.tanh(beta*epsilon)) + k*np.log(1 + np.exp(-2*epsilon*beta)))
         cs.append(epsilon**2*beta/(temp * np.cosh(beta*epsilon)**2))
-    """
+
     for i in range(num_sim_temps):
-        plt.hist(m_aves[i])
+        plt.hist(m_aves[i], range=[-1, 1], bins=50)
         plt.title("m values at " + str(temperatures_sim[i]) + " ε/k, with " + str(N) + " dipoles")
         plt.ylabel("frequency")
         plt.xlabel("m")
         plt.show()
-    """
 
+    """
     # plot u
     plt.plot(temps_exact, us, label="exact")
     plt.errorbar(temps_sim, ave(us_sim), ls="--", yerr=error(us_sim), ecolor="k", label="sim")
@@ -216,7 +216,7 @@ def make_plots(temps_sim, temps_exact):
     plt.ylabel('u')
     plt.xlabel("temperature")
     plt.show()
-    """
+    
     #plot f
     plt.plot(temps_exact, fs, label="exact")
     plt.errorbar(temps_sim, ave(fs_sim), ls="--", yerr=error(fs_sim), ecolor="k", label="sim")
