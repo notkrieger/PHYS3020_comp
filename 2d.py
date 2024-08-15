@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn
 import time
+from math import comb
 
 """
 2-dimensional Ising model
@@ -20,6 +21,7 @@ spin_probability = 0.5  # when initialising if random.random >= spin_probability
 total_steps = 1000 * N * N + 1 # 1000 * N^2 + 1 total steps
 timesteps = np.linspace(0, total_steps, total_steps) # for plotting later
 Us = np.linspace(0, total_steps, total_steps) # list of Us
+animation_rate = 10000 # updates animation every X time steps
 
 print(total_steps)
 
@@ -33,6 +35,11 @@ def visualise(state, temp, string):
         plt.title(string + " spin state at temperature: " + str(temp))
     plt.show()
 
+def animate(state, time):
+    plt.imshow(state)
+    plt.title(str(round(time/(total_steps - 1) * 100, 3)) + " %")
+    plt.pause(0.00001)
+    plt.clf()
 
 # attempt to speed up program, would remove need for copy and running solve_U twice
 # solve next U value given a state and a flipped dipole at (row, col)
@@ -98,6 +105,13 @@ def metropolis(state, beta, last_U):
         else:
             return state, last_U, 0
 
+def multiplicity(state):
+    up = 0
+    for i in range(N):
+        for j in range(N):
+            if state[i][j] == 1:
+                up += 1
+    return comb(N*N, up)
 
 def model(temp): # one dimensional Ising Model
     # variables
@@ -118,11 +132,14 @@ def model(temp): # one dimensional Ising Model
     totalU = 0
     totalU2 = 0
     for i in range(total_steps):
+        if i % animation_rate == 0:
+            #animate(spins, i)
+            continue
         if i + 1 == total_steps:
             flips[i] = total_flips  # to make array sizes line up for clean plots
             continue
         spins, next_U, flipped = metropolis(spins, beta, Us[i])
-        if i+1 == total_steps:
+        if i+1 > total_steps:
             continue
         Us[i + 1] = next_U
         total_flips += flipped
@@ -134,9 +151,13 @@ def model(temp): # one dimensional Ising Model
             print(end - start)
             start = end
 
-    #visualise(spins, temp, "Final") # visualise final state
 
-    return flips
+
+    #visualise(spins, temp, "Final") # visualise final state
+    U_ave = np.mean(Us)
+    S = k * np.log(multiplicity(spins))
+    f = U_ave - temp * S
+    return flips, U_ave/N, f/N, S/N
 
 # for plots
 num_trials = 1
@@ -183,9 +204,10 @@ def error(sim_values):
     return err
 
 for temp in temperatures_sim:
-    results = model(temp)
-    for i in range(total_steps):
-        flips_sim[temp-1][i] = results[i]
+    flips, U, f, S = model(temp)
+
+    for k in range(total_steps):
+        flips_sim[temp-1][k] = flips[k]
 
 flips_sim = np.log(flips_sim)
 
