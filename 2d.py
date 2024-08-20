@@ -2,25 +2,25 @@
 # for Q2 of project
 # based heavily off of 1d model
 
-import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn
 import time
-from math import comb
+from numba import jit, njit # makes code miles faster
+
 
 """
 2-dimensional Ising model
 """
 
 k = 1  # Boltzmann constant -- currently trying to use "natural units"
-N = 100  # number of dipoles in the system
+N = 100  # Nxn dipoles in the system
+P = N*N # true number of dipoles
 epsilon = 1  # energy contribution factor??
 initial_T = 1  # temperature
 spin_probability = 0.5  # when initialising if random.random >= spin_probability, set spin to 1, else -1
-total_steps = 1000 * N * N + 1 # 1000 * N^2 + 1 total steps
+total_steps = 1000 * P + 1 # 1000 * N^2 + 1 total steps
 timesteps = np.linspace(0, total_steps, total_steps) # for plotting later
-Us = np.linspace(0, total_steps, total_steps) # list of Us
 animation_rate = 10000 # updates animation every X time steps
 
 print(total_steps)
@@ -35,6 +35,7 @@ def visualise(state, temp, string):
         plt.title(string + " spin state at temperature: " + str(temp))
     plt.show()
 
+#animate cos it looks cool
 def animate(state, time):
     plt.imshow(state)
     plt.title(str(round(time/(total_steps - 1) * 100, 3)) + " %")
@@ -43,6 +44,7 @@ def animate(state, time):
 
 # attempt to speed up program, would remove need for copy and running solve_U twice
 # solve next U value given a state and a flipped dipole at (row, col)
+@jit
 def next_state_U(state, row, col, lastU): # solves next states U value correctly,
     del_U = 0
     right = (row + 1) % N
@@ -67,6 +69,7 @@ def next_state_U(state, row, col, lastU): # solves next states U value correctly
 
 
 # solve U for initial state
+@jit
 def solveU(state):
     U = 0
     for i in range(N):  # same as 1d, 1->i+1 and j to j+1, then multiply by 2 if necessary
@@ -87,6 +90,7 @@ def solveU(state):
 
 # returns:
     #   - next state -- may have one flipped dipole compared to state
+@jit
 def metropolis(state, beta, last_U):
     # choose random dipole at (rrow, rcol
     rrow, rcol = np.random.randint(0, N, (1, 2))[0]
@@ -105,21 +109,28 @@ def metropolis(state, beta, last_U):
         else:
             return state, last_U, 0
 
-def multiplicity(state):
+@jit
+def log_multiplicity(state):
+    ## use Stirlings approximation
     up = 0
     for i in range(N):
         for j in range(N):
             if state[i][j] == 1:
                 up += 1
-    return comb(N*N, up)
+    down = P - up
+    #print("up percent: " + str(up/P*100))
+    if up == 0 or down == 0:
+        return np.log(1) # to avoid divide by 0 error
+    else: # use stirling approximation
+        return P * np.log(P) - up * np.log(up) - down * np.log(down)
 
+@jit
 def model(temp): # one dimensional Ising Model
     # variables
     beta = 1/(k*temp)
+    Us = np.linspace(0, total_steps, total_steps)  # list of Us
     # initialise spins
     spins = np.random.random((N, N))
-    flips = np.zeros(total_steps)
-    total_flips = 0
     for i in range(N):
         for j in range(N):
             if spins[i][j] >= spin_probability:
@@ -128,60 +139,49 @@ def model(temp): # one dimensional Ising Model
                 spins[i][j] = -1
     #visualise(spins, temp, "Initial") # visualise intial state
     Us[0] = solveU(spins) # define U at time = 0
-    start = time.time()
-    totalU = 0
-    totalU2 = 0
+    Ss = np.linspace(0, total_steps, total_steps)
     for i in range(total_steps):
+        if i >= total_steps/10 - 1000:
+            Ss[i] = log_multiplicity(spins)
+        # animate the process, slows down the simulaiton massively, but looks cool
         if i % animation_rate == 0:
             #animate(spins, i)
             continue
-        if i + 1 == total_steps:
-            flips[i] = total_flips  # to make array sizes line up for clean plots
-            continue
+
         spins, next_U, flipped = metropolis(spins, beta, Us[i])
         if i+1 > total_steps:
             continue
         Us[i + 1] = next_U
-        total_flips += flipped
-        flips[i] = total_flips
 
-        if i % 1000000 == 0 and i > 0:
-            print(str(round(i/total_steps*100, 1)) + " % complete")
-            end = time.time()
-            print(end - start)
-            start = end
+    # calculate stuff for plots
+    U_ave = np.mean(Us[-int(total_steps / 10):])  # time average value of U : ⟨U⟩
 
+    S = np.mean(Ss[-int(total_steps / 10):])  # entropy S = k ln(g)
+    #print("S: " + str(S))
 
+    f = U_ave - temp * S  # free energy F = U - TS
+    # Var(U) = ⟨U^2⟩ - ⟨U⟩^2
+    # only use last 10% of time steps for accurate results
+    # this just worked idk
+    c = np.var(Us[-int(total_steps / 10):]) / (temp ** 2)
 
-    #visualise(spins, temp, "Final") # visualise final state
-    U_ave = np.mean(Us)
-    S = k * np.log(multiplicity(spins))
-    f = U_ave - temp * S
-    return flips, U_ave/N, f/N, S/N
+    m = abs(np.mean(spins))  # average spin m = M/mu*N = s_bar
+
+    return U_ave/P, f/P, S/P, c/P, m
 
 # for plots
-num_trials = 1
-low_t = 1.5
-high_t = 2.5
-num_sim_temps = 3
-#temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
-temperatures_sim = [1,2,3]
+num_trials = 3
+low_t = 0.1
+high_t = 3
+num_sim_temps = 10
+temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
+#temperatures_sim = [1,2,3]
 
-flips_sim = np.zeros((num_sim_temps, total_steps))
+all_spins = []
 
-
-# setting up plot arrays
-us = []
-us_sim = np.zeros((num_trials, num_sim_temps))
-fs = []
-fs_sim = np.zeros((num_trials, num_sim_temps))
-Ss = []
-Ss_sim = np.zeros((num_trials, num_sim_temps))
-cs = []
-cs_sim = np.zeros((num_trials, num_sim_temps))
-ms_sim = np.zeros(num_sim_temps)
 
 # very unclean code, shouldn't affect speed tho cos at end
+@jit
 def ave(sim_values):
     ave = np.zeros(num_sim_temps)
     for j in range(num_trials):
@@ -189,8 +189,8 @@ def ave(sim_values):
             ave[i] += sim_values[j][i]
     return ave/num_trials
 
-
 # calculate error
+@jit
 def error(sim_values):
     average = ave(sim_values)
     err = np.zeros(num_sim_temps)
@@ -203,19 +203,71 @@ def error(sim_values):
         err[i] = err[i]**0.5
     return err
 
-for temp in temperatures_sim:
-    flips, U, f, S = model(temp)
+def make_plots(temps_sim):
+    # setting up plot arrays
+    us_sim = np.zeros((num_trials, num_sim_temps))
+    fs_sim = np.zeros((num_trials, num_sim_temps))
+    Ss_sim = np.zeros((num_trials, num_sim_temps))
+    cs_sim = np.zeros((num_trials, num_sim_temps))
+    ms_sim = np.zeros(num_sim_temps)
 
-    for k in range(total_steps):
-        flips_sim[temp-1][k] = flips[k]
+    # simulate solutions
+    for trial in range(num_trials):
+        print(trial)
+        start_total = time.time()
+        for i in range(num_sim_temps):
+            start = time.time()
+            temp = temps_sim[i]
+            print('starting simulation at: ' + str(temp) + " C")
+            results = model(temp)
+            us_sim[trial][i] = results[0]
+            fs_sim[trial][i] = results[1]
+            Ss_sim[trial][i] = results[2]
+            cs_sim[trial][i] = results[3]
+            ms_sim[i] = results[4]  # dont need to average or calc uncertainty for m
+            end = time.time()
+            print("sim time: " + str(end - start))
+        end_total = time.time()
+        print("1 temp range sim time: " + str(end_total - start_total))
 
-flips_sim = np.log(flips_sim)
+    # plot u
+    plt.errorbar(temps_sim, ave(us_sim), ls="--", yerr=error(us_sim), ecolor="k")
+    plt.title("plot of u against T")
+    plt.ylabel('u')
+    plt.xlabel("temperature")
+    plt.show()
 
-plt.plot(timesteps, flips_sim[0], label="1")
-plt.plot(timesteps, flips_sim[1], label="2")
-plt.plot(timesteps, flips_sim[2], label="3")
-plt.legend()
-plt.xlabel("time steps")
-plt.ylabel("log cumulative flips")
-plt.title("flips through time")
-plt.show()
+    #plot f
+    plt.errorbar(temps_sim, ave(fs_sim), ls="--", yerr=error(fs_sim), ecolor="k")
+    plt.title("plot of f against T")
+    plt.ylabel('f')
+    plt.xlabel("temperature")
+    plt.show()
+
+    # plot S
+
+    plt.errorbar(temps_sim, ave(Ss_sim), ls="--", yerr=error(Ss_sim), ecolor="k")
+    plt.title("plot of S against T")
+    plt.ylabel('S')
+    plt.xlabel("temperature")
+    plt.show()
+
+    #plot c
+    plt.errorbar(temps_sim, ave(cs_sim), ls="--", yerr=error(cs_sim), ecolor="k")
+    plt.title("plot of c against T")
+    plt.ylabel('c')
+    plt.xlabel("temperature")
+    plt.show()
+
+    # plot m
+    plt.errorbar(temps_sim, ms_sim)
+    plt.title("plot of m against T")
+    plt.ylabel('m')
+    plt.xlabel("temperature")
+    plt.show()
+
+
+
+make_plots(temperatures_sim)
+
+
