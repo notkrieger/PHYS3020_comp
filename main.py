@@ -12,11 +12,10 @@ import time
 
 
 k = 1  # Boltzmann constant -- currently trying to use "natural units"
-N = 100  # number of dipoles in the system
+N = 250  # number of dipoles in the system
 epsilon = 1  # energy contribution factor??
 initial_T = 2  # temperature
 spin_probability = 0.5  # when initialising if random.random >= spin_probability, set spin to 1, else -1
-
 
 # visualise the data in a heatmap
 def visualise(state, temp, string):
@@ -29,17 +28,16 @@ def visualise(state, temp, string):
 
 def next_state_U(state, index, lastU): # solves next states U value correctly,
     # quicker then deep copying the old state, and solving U then subtracting difference
-
-
     del_U = 0
 
     right = (index + 1) % N
+    left = (index - 1) % N
     # subtract influence of unflipped dipole
     del_U -= state[index] * state[right]
-    del_U -= state[(index - 1) % N] * state[index]
+    del_U -= state[left] * state[index]
     # add change from flipping dipole
     del_U += state[index] * -1 * state[right]
-    del_U += state[(index - 1) % N] * state[index] * -1
+    del_U += state[left] * state[index] * -1
     del_U *= -epsilon
     del_U += lastU
 
@@ -50,16 +48,11 @@ def solveU(state):
     U = 0
     for i in range(N):  # just count interaction between dipole i and i + 1 --- do i need to x2???
         right = (i + 1) % N  # to account for periodic boundaries
-        U += state[i]*state[right]  # add to U
-    return U * -epsilon  # multiply by negative eps and return
+        left = (i - 1 % N)
+        U += state[i] * state[right]  # add to U
+        U += state[i] * state[left]
+    return U / 2 * -epsilon  # multiply by negative eps and return
 
-
-def solve_U2(state):
-    U2 = 0
-    for i in range(N):  # just count interaction between dipole i and i + 1 --- do i need to x2???
-        right = (i + 1) % N  # to account for periodic boundaries
-        U2 += (state[i] * state[right]) ** 2  # add to U
-    return U2   # multiply by negative eps and return
 
 # metropolis algorithm
 # inputs:
@@ -73,6 +66,7 @@ def metropolis(state, beta, lastU): # did not have to speed up as much because N
     random_dipole = np.random.randint(0, N, 1)[0]
     next_U = next_state_U(state, random_dipole, lastU)
     del_U = next_U - lastU
+
     if del_U <= 0: # flip
         state[random_dipole] *= -1
         return state, next_U
@@ -101,6 +95,8 @@ def model(temp): # one dimensional Ising Model
     totalU = 0
     totalU2 = 0
     totalm = 0
+
+    end = int(total_steps/1000) # get last "end" elements to calculate time average
     # initialise spins
     spins = np.random.random(N)
     for i in range(N):
@@ -111,7 +107,7 @@ def model(temp): # one dimensional Ising Model
     #visualise(spins, temp, "Initial") # visualise intial state
 
     Us[0] = solveU(spins)
-    Us2[0] = solve_U2(spins)
+    Us2[0] = solveU(spins) ** 2
     for i in range(total_steps):
         #print(Us[i])
         spins, next_U = metropolis(spins, beta, Us[i])
@@ -120,35 +116,31 @@ def model(temp): # one dimensional Ising Model
         if i + 1 >= total_steps:
             continue
 
-        Us2[i + 1] = solve_U2(spins)
+        #Us2[i + 1] = solve_U2(spins)
         Us[i+1] = next_U
+        Us2[i+1] = next_U**2 # this makes more sense than solve_U2
         totalm += np.mean(spins)
 
     # calculate stuff for plots
-    #
-    U_ave = np.mean(Us) / N # time average value of U : ⟨U⟩
-    U2_ave = np.mean(Us2) / N # ⟨U^2⟩
-    m_ave = totalm / total_steps
+    U_ave = np.mean(Us) # time average value of U : ⟨U⟩
 
-    U = solveU(spins)
     S = k * np.log(find_multiplicity(spins)) # entropy S = k ln(g)
     f = U_ave - temp * S # free energy F = U - TS
-    c = (U2_ave - U_ave**2)/(k*temp**2) # ⟨U^2⟩ - ⟨U⟩^2 / kT^2
-    if temp != 0.5:
-        print("⟨U^2⟩: " + str(U2_ave))
-        print("⟨U⟩^2: " + str(U_ave ** 2))
-        print("sim c  : " + str(c))
-        print("exact c: " + str(1/(temp**2 * np.cosh(beta)**2)))
+    # Var(U) = ⟨U^2⟩ - ⟨U⟩^2
+    # only use last 10% of time steps for accurate results
+    # this just worked idk
+    c = np.var(Us[-int(total_steps/10):])/(temp**2)
+
     m = np.mean(spins) # average spin m = M/mu*N = s_bar
 
     #visualise(spins, temp, "Final") # visualise final state
     return U_ave/N, f/N, S/N, c/N, m
 
 # for plots
-num_trials = 3
+num_trials = 10
 low_t = 0.1
 high_t = 3
-num_sim_temps = 10
+num_sim_temps = 15
 temperatures_exact = np.linspace(low_t, high_t, 1000)
 temperatures_sim = np.linspace(low_t, high_t, num_sim_temps)
 
